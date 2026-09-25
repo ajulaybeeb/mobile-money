@@ -625,6 +625,11 @@ async function initializeRuntime(): Promise<void> {
   const { startJobs } = await import("./jobs/scheduler.js");
   startJobs();
 
+  // Start JWT key rotation worker (issue #1971): rotates the signing key
+  // on schedule and deprecates old secrets after the grace window.
+  const { startKeyRotationWorker } = await import("./workers/keyRotation.js");
+  startKeyRotationWorker();
+
   // Initialize Prometheus Horizon Scraper
   startStellarExporter();
 

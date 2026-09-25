@@ -20,6 +20,11 @@ import { createError } from "../middleware/errorHandler";
 import { UserModel } from "../models/users";
 import { CustomerDataMaskingService } from "../services/customerDataMaskingService";
 import { createDeleteCustomerHandler } from "../routes/sep12";
+import {
+  kycSanitizeBody,
+  sanitizeKycPayload,
+  sanitizeKycString,
+} from "../validators/kycSanitizer";
 
 /**
  * SEP-12: KYC API
@@ -428,43 +433,67 @@ export class Sep12Service {
   ): Promise<Sep12CustomerResponse> {
     try {
       const validatedData = PutCustomerSchema.parse(data);
-
+      // Sanitize all string fields (issue #1973): reject HTML/SQL/command
+      // injection payloads and escape the surviving values before persistence.
       const {
         account,
         memo,
         memo_type,
         type,
-        first_name,
-        last_name,
+        first_name: rawFirstName,
+        last_name: rawLastName,
         email_address,
         mobile_number,
         birth_date,
         birth_place,
         birth_country,
-        address,
+        address: rawAddress,
         address_country_code,
         state_or_province,
-        city,
+        city: rawCity,
         postal_code,
         id_type,
         id_country_code,
         id_issue_date,
         id_expiration_date,
-        id_number,
+        id_number: rawIdNumber,
         photo_id_front,
         photo_id_back,
         photo_proof_residence,
-        organization_name,
-        organization_registration_number,
+        organization_name: rawOrganizationName,
+        organization_registration_number: rawOrganizationRegNumber,
         organization_registration_date,
-        organization_registered_address,
-        tax_id,
+        organization_registered_address: rawOrganizationAddress,
+        tax_id: rawTaxId,
         tax_id_name,
-        occupation,
-        employer_name,
-        employer_address,
+        occupation: rawOccupation,
+        employer_name: rawEmployerName,
+        employer_address: rawEmployerAddress,
         ...customFields
       } = validatedData;
+
+      const first_name = rawFirstName ? sanitizeKycString("first_name", rawFirstName) : rawFirstName;
+      const last_name = rawLastName ? sanitizeKycString("last_name", rawLastName) : rawLastName;
+      const address = rawAddress ? sanitizeKycString("address", rawAddress) : rawAddress;
+      const city = rawCity ? sanitizeKycString("city", rawCity) : rawCity;
+      const id_number = rawIdNumber ? sanitizeKycString("id_number", rawIdNumber) : rawIdNumber;
+      const organization_name = rawOrganizationName
+        ? sanitizeKycString("organization_name", rawOrganizationName)
+        : rawOrganizationName;
+      const organization_registration_number = rawOrganizationRegNumber
+        ? sanitizeKycString("organization_registration_number", rawOrganizationRegNumber)
+        : rawOrganizationRegNumber;
+      const organization_registered_address = rawOrganizationAddress
+        ? sanitizeKycString("organization_registered_address", rawOrganizationAddress)
+        : rawOrganizationAddress;
+      const tax_id = rawTaxId ? sanitizeKycString("tax_id", rawTaxId) : rawTaxId;
+      const occupation = rawOccupation ? sanitizeKycString("occupation", rawOccupation) : rawOccupation;
+      const employer_name = rawEmployerName
+        ? sanitizeKycString("employer_name", rawEmployerName)
+        : rawEmployerName;
+      const employer_address = rawEmployerAddress
+        ? sanitizeKycString("employer_address", rawEmployerAddress)
+        : rawEmployerAddress;
 
       // Find or create user by Stellar account
       let userId: string;
@@ -522,7 +551,9 @@ export class Sep12Service {
             }
           : undefined,
         custom_fields:
-          Object.keys(customFields).length > 0 ? customFields : undefined,
+          Object.keys(customFields).length > 0
+            ? (sanitizeKycPayload(customFields) as typeof customFields)
+            : undefined,
       };
 
       let applicant;
@@ -705,6 +736,7 @@ export const createSep12Router = (db: Pool): Router => {
     "/customer",
     sep12Limiter,
     upload.any(),
+    kycSanitizeBody,
     async (req: Request, res: Response) => {
       try {
         const customerData = { ...req.body };

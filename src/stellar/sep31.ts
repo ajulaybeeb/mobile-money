@@ -11,6 +11,7 @@ import { createError } from "../middleware/errorHandler";
 import { pool } from "../config/database";
 import { sanctionService } from "../services/sanctionService";
 import { notifyReceivingAnchorStatus } from "../services/webhookService";
+import { strictIdempotency } from "../middleware/idempotency";
 
 const router = Router();
 const transactionModel = new TransactionModel();
@@ -220,6 +221,7 @@ router.get("/info", sep31ReadLimiter, async (req: Request, res: Response) => {
 router.post(
   "/transactions",
   sep31WriteLimiter,
+  strictIdempotency,
   async (req: Request, res: Response) => {
     const {
       amount,
