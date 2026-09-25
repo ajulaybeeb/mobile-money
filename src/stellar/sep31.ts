@@ -15,6 +15,8 @@ import {
   PENDING_COMPLIANCE_REVIEW,
   amlScreeningService,
 } from "../services/amlScreening";
+import { notifyReceivingAnchorStatus } from "../services/webhookService";
+import { strictIdempotency } from "../middleware/idempotency";
 
 const router = Router();
 const transactionModel = new TransactionModel();
@@ -224,6 +226,7 @@ router.get("/info", sep31ReadLimiter, async (req: Request, res: Response) => {
 router.post(
   "/transactions",
   sep31WriteLimiter,
+  strictIdempotency,
   async (req: Request, res: Response) => {
     const {
       amount,
@@ -233,6 +236,8 @@ router.post(
       receiver_id,
       fields,
       lang,
+      callback_url,
+      callback_secret,
     } = req.body;
 
     // --- Input Validation ---
@@ -432,6 +437,10 @@ router.post(
             ? null
             : configuredAsset.getIssuer(),
           lang: lang || "en",
+          // Receiving anchors register their callback and shared secret with
+          // the transfer. They are used only for outbound status webhooks.
+          callback_url: callback_url || txFields.callback_url || null,
+          callback_secret: callback_secret || txFields.callback_secret || null,
           compliance_status: complianceStatus,
           ...(isComplianceFlagged && topMatch
             ? {
@@ -479,6 +488,14 @@ router.post(
             ? `SEP-31 cross-border payment from ${finalSenderId} to ${finalReceiverId} flagged pending_compliance_review by high-volume AML screening`
             : `SEP-31 cross-border payment from ${finalSenderId} to ${finalReceiverId}`,
       });
+
+      if (initialStatus === Sep31Status.PendingReceiver) {
+        await notifyReceivingAnchorStatus(
+          newTransaction,
+          Sep31Status.PendingReceiver,
+          metadata,
+        );
+      }
 
       // Persist the immutable, hash-chained AML audit records for any matches
       // now that the transaction (and its real id) exists.
