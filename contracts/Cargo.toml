@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["blacklist", "dispute", "escrow", "htlc", "quicklendx-contracts", "oracle", "router", "vault"]
+members = ["blacklist", "dispute", "escrow", "fee_tier", "htlc", "quicklendx-contracts", "oracle", "router", "vault"]
 
 [profile.release]
 opt-level = "z"
