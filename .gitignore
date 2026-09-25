@@ -83,3 +83,6 @@ test-results/
 *.tmp
 *.temp
 .cache/
+
+# ── Soroban deployment config (may reference admin keys) ──
+config/contracts.json
