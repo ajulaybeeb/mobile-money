@@ -77,8 +77,11 @@ import { privacyRoutes } from "./routes/privacy";
 import { developerDashboardRoutes } from "./routes/developerDashboard";
 import { travelRuleRoutes } from "./routes/travelRule";
 import mtnCallbacksRouter from "./routes/mtnCallbacks";
+import mpesaCallbacksRouter from "./routes/mpesaCallbacks";
+import { createMpesaC2BRouter } from "./providers/mpesa/c2b";
 import orangeMadagascarCallbacksRouter from "./routes/orangeMadagascarCallbacks";
 import orangeGuineaCallbacksRouter from "./routes/orangeGuineaCallbacks";
+import { createOrangeQrRouter } from "./providers/orange/qrCode";
 import multisigCallbacksRouter from "./routes/multisigCallbacks";
 import adminWithdrawalsRouter from "./routes/adminWithdrawals";
 import { createMetricsRouter } from "./routes/metrics";
@@ -452,8 +455,11 @@ app.use("/api/disputes", disputeRoutes);
 app.use("/api/stats", statsRoutes);
 app.use("/api/contacts", contactsRoutes);
 app.use("/api/mtn", mtnCallbacksRouter);
+app.use("/api/mpesa", mpesaCallbacksRouter);
+app.use("/api/mpesa/c2b", createMpesaC2BRouter());
 app.use("/api/orange-madagascar", orangeMadagascarCallbacksRouter);
 app.use("/api/orange-guinea", orangeGuineaCallbacksRouter);
+app.use("/api/orange/qr", createOrangeQrRouter());
 app.use("/api/multisig", multisigCallbacksRouter);
 
 // Apply custom configurable CORS allowlist for admin routes
@@ -708,6 +714,15 @@ async function initializeRuntime(): Promise<void> {
     startRefundWorker();
     await scheduleProviderBalanceAlertJob();
     console.log("Provider balance alert queue initialized");
+
+    // STK push query polling fallback (#1969): poll `stkpushquery` when the
+    // callback does not arrive within 30s. Safe to start unconditionally —
+    // it only schedules work when `onStkPushInitiated` is called.
+    const { mpesaStkQueryWorker } = await import(
+      "./workers/mpesaStkQueryWorker.js"
+    );
+    mpesaStkQueryWorker.start();
+    console.log("M-Pesa STK query worker started");
   } catch (err) {
     logger.error("Redis failed", err);
     console.warn("Distributed locks not available");

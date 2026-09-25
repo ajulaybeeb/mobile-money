@@ -25,6 +25,11 @@ import {
   PostgresSep24TransactionStore,
   Sep24TransactionStore,
 } from "./sep24Store";
+import { renderSep24InteractivePage } from "../services/sep24InteractivePage";
+import {
+  OrangeQrCodeGenerator,
+  renderOrangeMoneyQrSection,
+} from "../providers/orange/qrCode";
 
 function isValidStellarPublicKey(key: string): boolean {
   try {
@@ -698,6 +703,62 @@ const withdrawHandler = async (
 
 sep24Router.post("/deposit", sep24Limiter, depositHandler);
 sep24Router.post("/withdraw", sep24Limiter, withdrawHandler);
+
+/**
+ * GET /sep24/interactive/deposit
+ *
+ * Renders the SEP-24 interactive deposit page and, when Orange Money
+ * scan-to-pay parameters are supplied, embeds a base64 QR code image in the
+ * page (#1968).
+ *
+ * Query params: transaction_id, merchant_id, amount, currency, reference,
+ * merchant_name, merchant_city.
+ */
+sep24Router.get("/interactive/deposit", async (req: Request, res: Response) => {
+  res.setHeader("Content-Type", "text/html; charset=utf-8");
+
+  const merchantId = req.query.merchant_id
+    ? String(req.query.merchant_id)
+    : undefined;
+  const amount = req.query.amount ? String(req.query.amount) : undefined;
+
+  if (!merchantId || !amount) {
+    return res.send(renderSep24InteractivePage());
+  }
+
+  try {
+    const generator = new OrangeQrCodeGenerator();
+    const qr = await generator.generate({
+      merchantId,
+      amount,
+      currency: req.query.currency ? String(req.query.currency) : undefined,
+      reference: req.query.reference
+        ? String(req.query.reference)
+        : req.query.transaction_id
+          ? String(req.query.transaction_id)
+          : undefined,
+      merchantName: req.query.merchant_name
+        ? String(req.query.merchant_name)
+        : undefined,
+      merchantCity: req.query.merchant_city
+        ? String(req.query.merchant_city)
+        : undefined,
+    });
+
+    return res.send(
+      renderSep24InteractivePage({
+        qrSectionHtml: renderOrangeMoneyQrSection(qr),
+      }),
+    );
+  } catch (error: any) {
+    logger.warn(
+      { error: error.message },
+      "[SEP-24] Failed to render Orange Money QR section",
+    );
+    // Never fail the interactive page because of a provider-specific embed.
+    return res.send(renderSep24InteractivePage());
+  }
+});
 
 // Canonical SEP-24 paths.
 sep24Router.post(
