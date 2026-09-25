@@ -17,6 +17,7 @@ import {
 } from "../services/stellar/hsmService";
 import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { getS3Client, s3Config, getSignedObjectUrl } from "../config/s3";
+import { kycSanitizeBody } from "../validators/kycSanitizer";
 
 const COMPLIANCE_OFFICER_ROLE = "compliance_officer";
 const REDACTED_FILE_URL = "[REDACTED]";
@@ -95,16 +96,16 @@ export const createKYCRoutes = (db: Pool): Router => {
   // All remaining KYC routes require authentication
   router.use(authenticateToken);
 
-  // Applicant management
-  router.post("/applicants", kycController.createApplicant);
+  // Applicant management (inputs sanitized — issue #1973)
+  router.post("/applicants", kycSanitizeBody, kycController.createApplicant);
   router.get("/applicants/:applicantId", kycController.getApplicant);
   router.get(
     "/applicants/:applicantId/status",
     kycController.getVerificationStatus,
   );
 
-  // Document upload (legacy - base64)
-  router.post("/documents", kycController.uploadDocument);
+  // Document upload (legacy - base64, sanitized)
+  router.post("/documents", kycSanitizeBody, kycController.uploadDocument);
 
   // File upload to S3
   router.post(
